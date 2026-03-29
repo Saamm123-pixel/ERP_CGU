@@ -2,12 +2,13 @@ import { useState, useEffect } from "react";
 import { useLocation } from "react-router-dom";
 import { createPortal } from "react-dom";
 import Layout from "../components/Layout";
-import { getUsersByRole, banUser, unbanUser } from "../services/api";
+import { getUsersByRole, banUser, unbanUser, getAllAttendance, getAllGrades } from "../services/api";
 
 const myCourses = [
-  { code: "CS501", name: "Data Structures",   schedule: "Mon, Wed 9AM" },
-  { code: "CS502", name: "Operating Systems", schedule: "Tue, Thu 11AM" },
-  { code: "CS503", name: "DBMS",              schedule: "Mon, Fri 1PM" },
+  { code: "CS501", name: "Data Structures",      schedule: "Mon, Wed 9AM",  students: 42, room: "Lab 101" },
+  { code: "CS502", name: "Operating Systems",    schedule: "Tue, Thu 11AM", students: 38, room: "Room 202" },
+  { code: "CS503", name: "DBMS",                 schedule: "Mon, Fri 1PM",  students: 45, room: "Room 305" },
+  { code: "CS504", name: "Computer Networks",    schedule: "Wed, Fri 3PM",  students: 40, room: "Lab 102" },
 ];
 
 function BanModal({ target, onClose, onBan }) {
@@ -104,15 +105,19 @@ function StudentTable({ students, loading, onBan, onUnban }) {
 }
 
 function FacultyDashboard() {
-  const user        = JSON.parse(localStorage.getItem("user"));
-  const location    = useLocation();
+  const user         = JSON.parse(localStorage.getItem("user"));
+  const location     = useLocation();
   const showStudents = location.pathname.includes("/students");
-  const [students,  setStudents]  = useState([]);
-  const [loading,   setLoading]   = useState(true);
-  const [banModal,  setBanModal]  = useState(null);
+  const [students,   setStudents]  = useState([]);
+  const [loading,    setLoading]   = useState(true);
+  const [banModal,   setBanModal]  = useState(null);
+  const [attendance, setAttendance] = useState([]);
+  const [grades,     setGrades]    = useState([]);
 
   useEffect(() => {
     getUsersByRole("student").then(r => { setStudents(r.data); setLoading(false); }).catch(() => setLoading(false));
+    getAllAttendance().then(r => setAttendance(r.data)).catch(() => {});
+    getAllGrades().then(r => setGrades(r.data)).catch(() => {});
   }, []);
 
   const handleBanned = (id, reason) => setStudents(p => p.map(s => s.id === id ? { ...s, banned: true, banReason: reason } : s));
@@ -122,10 +127,27 @@ function FacultyDashboard() {
   };
 
   const statCards = [
-    { label: "Courses",       value: myCourses.length,                                       accent: "stat-indigo",  iconCls: "stat-icon-indigo",  icon: "📚", color: "#818cf8" },
-    { label: "Students",      value: loading ? "—" : students.length,                        accent: "stat-emerald", iconCls: "stat-icon-emerald", icon: "🎓", color: "#34d399" },
-    { label: "Banned",        value: loading ? "—" : students.filter(s => s.banned).length,  accent: "stat-rose",    iconCls: "stat-icon-rose",    icon: "🚫", color: "#fb7185" },
-    { label: "Classes Today", value: 2,                                                       accent: "stat-amber",   iconCls: "stat-icon-amber",   icon: "📅", color: "#fbbf24" },
+    { label: "My Courses",    value: myCourses.length,                                      accent: "stat-indigo",  iconCls: "stat-icon-indigo",  icon: "📚", color: "#818cf8", sub: "This semester" },
+    { label: "Students",      value: loading ? "—" : students.length,                       accent: "stat-emerald", iconCls: "stat-icon-emerald", icon: "🎓", color: "#34d399", sub: "Registered" },
+    { label: "Attendance Rec",value: attendance.length,                                      accent: "stat-sky",     iconCls: "stat-icon-sky",     icon: "📋", color: "#38bdf8", sub: "Total records" },
+    { label: "Grades Entered",value: grades.length,                                          accent: "stat-violet",  iconCls: "stat-icon-violet",  icon: "📊", color: "#a78bfa", sub: "Total entries" },
+    { label: "Banned",        value: loading ? "—" : students.filter(s => s.banned).length, accent: "stat-rose",    iconCls: "stat-icon-rose",    icon: "🚫", color: "#fb7185", sub: "Needs review" },
+    { label: "Classes Today", value: 2,                                                      accent: "stat-amber",   iconCls: "stat-icon-amber",   icon: "📅", color: "#fbbf24", sub: "Scheduled" },
+  ];
+
+  const recentActivity = [
+    { action: "Marked attendance for Data Structures",  time: "Today 9AM",    color: "#34d399" },
+    { action: "Uploaded grades for DBMS Sem 5",         time: "Yesterday",    color: "#818cf8" },
+    { action: "Responded to student complaint",         time: "2 days ago",   color: "#38bdf8" },
+    { action: "Posted assignment for OS",               time: "3 days ago",   color: "#fbbf24" },
+    { action: "Approved gate pass request",             time: "4 days ago",   color: "#a78bfa" },
+  ];
+
+  const notices = [
+    { text: "Submit grade sheets by 25th Nov.",          color: "#a78bfa", date: "Today" },
+    { text: "Faculty development program on 12th Nov.",  color: "#38bdf8", date: "Yesterday" },
+    { text: "Exam duty roster released.",                color: "#fb7185", date: "2 days ago" },
+    { text: "Research paper deadline: 30th Nov.",        color: "#fbbf24", date: "3 days ago" },
   ];
 
   return (
@@ -134,7 +156,7 @@ function FacultyDashboard() {
 
       <div style={{ marginBottom: 24 }}>
         <h1 className="page-title">{showStudents ? "Students" : `Welcome, ${user?.name} 👋`}</h1>
-        <p className="page-sub">{showStudents ? `${students.length} registered students` : "Department of CSE · Faculty ID: CGU-FAC-021"}</p>
+        <p className="page-sub">{showStudents ? `${students.length} registered students` : `Department of CSE · Faculty Portal · ${new Date().toLocaleDateString("en-IN", { weekday: "long", month: "long", day: "numeric" })}`}</p>
       </div>
 
       {showStudents ? (
@@ -152,12 +174,13 @@ function FacultyDashboard() {
                 </div>
                 <p style={{ fontSize: "1.75rem", fontWeight: 700, color: s.color, margin: 0, lineHeight: 1 }}>{s.value}</p>
                 <p style={{ fontSize: "0.75rem", color: "rgba(148,163,184,0.5)", marginTop: 6 }}>{s.label}</p>
+                <p style={{ fontSize: "0.7rem", color: "rgba(148,163,184,0.3)", marginTop: 3 }}>{s.sub}</p>
               </div>
             ))}
           </div>
 
+          {/* Courses + Activity */}
           <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 16, marginBottom: 16 }}>
-            {/* Courses */}
             <div className="card" style={{ padding: 20 }}>
               <p className="section-title" style={{ marginBottom: 14 }}>My Courses</p>
               <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
@@ -165,27 +188,61 @@ function FacultyDashboard() {
                   <div key={c.code} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "10px 14px", borderRadius: 8, background: "rgba(14,165,233,0.06)", border: "1px solid rgba(14,165,233,0.15)" }}>
                     <div>
                       <p style={{ margin: 0, color: "#e2e8f0", fontWeight: 500, fontSize: "0.8125rem" }}>{c.name}</p>
-                      <p style={{ margin: 0, color: "rgba(148,163,184,0.4)", fontSize: "0.7rem", marginTop: 2 }}>{c.code} · {c.schedule}</p>
+                      <p style={{ margin: 0, color: "rgba(148,163,184,0.4)", fontSize: "0.7rem", marginTop: 2 }}>{c.code} · {c.schedule} · {c.room}</p>
                     </div>
-                    <span className="badge badge-sky">{loading ? "—" : students.length}</span>
+                    <span className="badge badge-sky">{c.students} students</span>
                   </div>
                 ))}
               </div>
             </div>
 
-            {/* Notices */}
+            <div className="card" style={{ padding: 20 }}>
+              <p className="section-title" style={{ marginBottom: 14 }}>Recent Activity</p>
+              <div style={{ display: "flex", flexDirection: "column", gap: 0 }}>
+                {recentActivity.map((a, i) => (
+                  <div key={i} style={{ display: "flex", alignItems: "center", gap: 10, padding: "10px 0", borderBottom: i < recentActivity.length - 1 ? "1px solid rgba(255,255,255,0.05)" : "none" }}>
+                    <span style={{ width: 7, height: 7, borderRadius: "50%", background: a.color, flexShrink: 0 }} />
+                    <div style={{ flex: 1 }}>
+                      <p style={{ margin: 0, fontSize: "0.8rem", color: "rgba(148,163,184,0.7)" }}>{a.action}</p>
+                      <p style={{ margin: 0, fontSize: "0.7rem", color: "rgba(148,163,184,0.35)", marginTop: 2 }}>{a.time}</p>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          </div>
+
+          {/* Notices + Students preview */}
+          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 16, marginBottom: 16 }}>
             <div className="card" style={{ padding: 20 }}>
               <p className="section-title" style={{ marginBottom: 14 }}>Notices</p>
               <div style={{ display: "flex", flexDirection: "column", gap: 0 }}>
-                {[
-                  { color: "#a78bfa", text: "Submit grade sheets by 25th Nov." },
-                  { color: "#38bdf8", text: "Faculty development program on 12th Nov." },
-                  { color: "#fb7185", text: "Exam duty roster released." },
-                  { color: "#fbbf24", text: "Research paper deadline: 30th Nov." },
-                ].map((n, i, arr) => (
-                  <div key={n.text} style={{ display: "flex", gap: 10, alignItems: "flex-start", padding: "10px 0", borderBottom: i < arr.length - 1 ? "1px solid rgba(255,255,255,0.05)" : "none" }}>
+                {notices.map((n, i) => (
+                  <div key={i} style={{ display: "flex", gap: 10, alignItems: "flex-start", padding: "10px 0", borderBottom: i < notices.length - 1 ? "1px solid rgba(255,255,255,0.05)" : "none" }}>
                     <span style={{ width: 6, height: 6, borderRadius: "50%", background: n.color, marginTop: 5, flexShrink: 0 }} />
-                    <p style={{ margin: 0, fontSize: "0.8rem", color: "rgba(148,163,184,0.7)", lineHeight: 1.5 }}>{n.text}</p>
+                    <div>
+                      <p style={{ margin: 0, fontSize: "0.8rem", color: "rgba(148,163,184,0.7)", lineHeight: 1.5 }}>{n.text}</p>
+                      <p style={{ margin: 0, fontSize: "0.7rem", color: "rgba(148,163,184,0.3)", marginTop: 2 }}>{n.date}</p>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+
+            <div className="card" style={{ padding: 20 }}>
+              <p className="section-title" style={{ marginBottom: 14 }}>Quick Stats</p>
+              <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+                {[
+                  { label: "Total Students",       value: loading ? "—" : students.length,                                      color: "#818cf8" },
+                  { label: "Active Students",       value: loading ? "—" : students.filter(s => !s.banned).length,               color: "#34d399" },
+                  { label: "Banned Students",       value: loading ? "—" : students.filter(s => s.banned).length,                color: "#fb7185" },
+                  { label: "Attendance Records",    value: attendance.length,                                                     color: "#38bdf8" },
+                  { label: "Grade Entries",         value: grades.length,                                                         color: "#a78bfa" },
+                  { label: "Courses Teaching",      value: myCourses.length,                                                      color: "#fbbf24" },
+                ].map(r => (
+                  <div key={r.label} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "8px 12px", borderRadius: 6, background: "rgba(255,255,255,0.03)" }}>
+                    <span style={{ fontSize: "0.8rem", color: "rgba(148,163,184,0.5)" }}>{r.label}</span>
+                    <span style={{ fontSize: "0.9rem", fontWeight: 700, color: r.color }}>{r.value}</span>
                   </div>
                 ))}
               </div>
