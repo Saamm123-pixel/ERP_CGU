@@ -1,0 +1,2 @@
+ALTER TABLE notices MODIFY COLUMN full_details VARCHAR(5000) NULL;
+ALTER TABLE complaints MODIFY COLUMN submitted_by_role VARCHAR(255) NULL;
